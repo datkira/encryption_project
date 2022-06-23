@@ -4,6 +4,8 @@ from tkinter import ttk
 import pymysql
 from dotenv import load_dotenv
 import os
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 
 load_dotenv()
 # need to create database "encryption_project" from command line before running this program
@@ -408,7 +410,21 @@ class OpenNewWindow(tk.Tk):
         label1 = tk.Label(frame1, font=("Verdana", 20), text="OpenNewWindow Page")
         label1.pack(side="top")
 
-
+private_key = rsa.generate_private_key(
+     public_exponent=65537,
+     key_size=2048,
+)
+private_bytes = private_key.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.TraditionalOpenSSL,
+    encryption_algorithm=serialization.BestAvailableEncryption(b'mypassword')
+)
+print (private_bytes)
+public_key = private_key.public_key()
+public_bytes = private_key.public_key().public_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PublicFormat.SubjectPublicKeyInfo
+)
 loadModel()
 
 top = LoginPage()
