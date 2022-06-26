@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 import os
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+from Crypto.Cipher import AES
+import base64
+
 
 load_dotenv()
 # need to create database "encryption_project" from command line before running this program
@@ -20,6 +23,11 @@ def loadModel():
         id INT(11) NOT NULL AUTO_INCREMENT,
         username VARCHAR(255) NOT NULL,
         password VARCHAR(255) NOT NULL,
+        data VARCHAR(255) NOT NULL,
+        data_encrypt VARCHAR(255) NOT NULL,
+        public_key VARCHAR(255) NOT NULL,
+        private_key VARCHAR(255) NOT NULL,
+        secret_key VARCHAR(255) NOT NULL,
         PRIMARY KEY (id)
     )""")
 
@@ -159,6 +167,10 @@ class LoginPage(tk.Tk):
                        crypto_serialization.PublicFormat.OpenSSH
             ).decode("utf-8")
             return (public_key, private_key)
+        def EncryptAES(data,password):
+            k
+             
+          
 
 
 class SignupPage(tk.Tk):
