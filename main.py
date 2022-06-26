@@ -168,11 +168,10 @@ class LoginPage(tk.Tk):
             ).decode("utf-8")
             return (public_key, private_key)
         def EncryptAES(data,password):
-            k
-             
-          
-
-
+            secret_key = password[0:16]
+            cipher = AES.new(secret_key,AES.MODE_CBC)
+            data = unpad(cipher.encrypt(pad(data),AES.block_size))
+            return data_encrypt
 class SignupPage(tk.Tk):
 
     def __init__(self, *args, **kwargs):
