@@ -143,6 +143,22 @@ class LoginPage(tk.Tk):
                 return True
             else:
                 return False
+        def generate_keypair():
+            key = rsa.generate_private_key(
+                backend=crypto_default_backend(),
+                public_exponent=65537,
+                key_size=2048
+            )
+            private_key = key.private_bytes(
+                        crypto_serialization.Encoding.PEM,
+                        crypto_serialization.PrivateFormat.TraditionalOpenSSL,
+                        crypto_serialization.NoEncryption()
+            ).decode("utf-8")
+            public_key = key.public_key().public_bytes(
+                       crypto_serialization.Encoding.OpenSSH,
+                       crypto_serialization.PublicFormat.OpenSSH
+            ).decode("utf-8")
+            return (public_key, private_key)
 
 
 class SignupPage(tk.Tk):
@@ -410,21 +426,7 @@ class OpenNewWindow(tk.Tk):
         label1 = tk.Label(frame1, font=("Verdana", 20), text="OpenNewWindow Page")
         label1.pack(side="top")
 
-private_key = rsa.generate_private_key(
-     public_exponent=65537,
-     key_size=2048,
-)
-private_bytes = private_key.private_bytes(
-    encoding=serialization.Encoding.PEM,
-    format=serialization.PrivateFormat.TraditionalOpenSSL,
-    encryption_algorithm=serialization.BestAvailableEncryption(b'mypassword')
-)
-print (private_bytes)
-public_key = private_key.public_key()
-public_bytes = private_key.public_key().public_bytes(
-    encoding=serialization.Encoding.PEM,
-    format=serialization.PublicFormat.SubjectPublicKeyInfo
-)
+
 loadModel()
 
 top = LoginPage()
