@@ -9,11 +9,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 from Crypto.Cipher import AES
 import base64
-from Crypto import Random
-from Crypto.Hash import SHA256
-import sys
-from os import listdir
-from os.path import isfile, join
+from base64 import b64encode
+from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
 
 
 load_dotenv()
