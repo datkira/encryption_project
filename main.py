@@ -4,8 +4,9 @@ from tkinter import ttk
 import pymysql
 from dotenv import load_dotenv
 import os
+from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend as crypto_default_backend
 from Crypto.Cipher import AES
 import base64
 from Crypto import Random
