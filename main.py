@@ -12,6 +12,7 @@ import base64
 from base64 import b64encode
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
+import json
 
 
 load_dotenv()
@@ -27,11 +28,11 @@ def loadModel():
         id INT(11) NOT NULL AUTO_INCREMENT,
         username VARCHAR(255) NOT NULL,
         password VARCHAR(255) NOT NULL,
-        data VARCHAR(255) NOT NULL,
-        data_encrypt VARCHAR(255) NOT NULL,
-        public_key VARCHAR(255) NOT NULL,
-        private_key VARCHAR(255) NOT NULL,
-        secret_key VARCHAR(255) NOT NULL,
+        data VARCHAR(255) ,
+        data_encrypt VARCHAR(255) ,
+        public_key VARCHAR(255),
+        private_key VARCHAR(255),
+        secret_key VARCHAR(255) ,
         PRIMARY KEY (id)
     )""")
 
@@ -155,29 +156,7 @@ class LoginPage(tk.Tk):
                 return True
             else:
                 return False
-        def generate_keypair():
-            key = rsa.generate_private_key(
-                backend=crypto_default_backend(),
-                public_exponent=65537,
-                key_size=2048
-            )
-            private_key = key.private_bytes(
-                        crypto_serialization.Encoding.PEM,
-                        crypto_serialization.PrivateFormat.TraditionalOpenSSL,
-                        crypto_serialization.NoEncryption()
-            ).decode("utf-8")
-            public_key = key.public_key().public_bytes(
-                       crypto_serialization.Encoding.OpenSSH,
-                       crypto_serialization.PublicFormat.OpenSSH
-            ).decode("utf-8")
-            return (public_key, private_key)
-        def EncryptAES(data,password):
-            secret_key = password[0:16]
-            cipher = AES.new(secret_key,AES.MODE_CBC)
-            data_encrypt = unpad(cipher.encrypt(pad(data),AES.block_size))
-            return data_encrypt
-        def DecryptAES(password,data_encrypt,secret_key):
-          
+                 
 class SignupPage(tk.Tk):
 
     def __init__(self, *args, **kwargs):
@@ -224,12 +203,15 @@ class SignupPage(tk.Tk):
                 if len(pw) > 3:
                     credentials = open("credentials.txt", "a")
                     credentials.write(f"Username,{user},Password,{pw},\n")
+                    keypublic,keyprivate = generate_keypair()
+                    credentials.write(f"Keypublic,{keypublic},keyprivate,{keyprivate},\n")
                     credentials.close()
                     tk.messagebox.showinfo("Information", "Your account details have been stored.")
                     SignupPage.destroy(self)
 
                 else:
                     tk.messagebox.showerror("Information", "Your password needs to be longer than 3 values.")
+            
 
         def validate_user(username):
             # Checks the text file for a username/password combination.
@@ -242,8 +224,28 @@ class SignupPage(tk.Tk):
                 return True
             except FileNotFoundError:
                 return True
-
-
+        def generate_keypair():
+            key = rsa.generate_private_key(
+                backend=crypto_default_backend(),
+                public_exponent=65537,
+                key_size=2048
+            )
+            private_key = key.private_bytes(
+                        crypto_serialization.Encoding.PEM,
+                        crypto_serialization.PrivateFormat.TraditionalOpenSSL,
+                        crypto_serialization.NoEncryption()
+            ).decode("utf-8")
+            public_key = key.public_key().public_bytes(
+                       crypto_serialization.Encoding.OpenSSH,
+                       crypto_serialization.PublicFormat.OpenSSH
+            ).decode("utf-8")
+            return (public_key, private_key)
+        def EncryptAES(data,password):
+            secret_key = password[0:16]
+            cipher = AES.new(secret_key,AES.MODE_CBC)
+            data_encrypt = unpad(cipher.encrypt(pad(data),AES.block_size))
+            iv = b64encode(cipher.iv).decode('utf-8')
+            return data_encrypt 
 class MenuBar(tk.Menu):
     def __init__(self, parent):
         tk.Menu.__init__(self, parent)
