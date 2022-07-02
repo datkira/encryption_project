@@ -25,15 +25,12 @@ cursor = db.cursor()
 def loadModel():
     # create user table if not exists
     cursor.execute("""CREATE TABLE IF NOT EXISTS user (
-        id INT(11) NOT NULL AUTO_INCREMENT,
-        username VARCHAR(255) NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        data VARCHAR(255) ,
-        data_encrypt VARCHAR(255) ,
-        public_key VARCHAR(255),
-        private_key VARCHAR(255),
-        secret_key VARCHAR(255) ,
-        PRIMARY KEY (id)
+        username VARCHAR(20) NOT NULL ,
+        password VARCHAR(20) NOT NULL,
+        key_public VARCHAR(2048) NOT NULL,
+        key_private VARCHAR(2048) NOT NULL,
+        vector_iv VARCHAR(2048) ,
+        PRIMARY KEY (username)
     )""")
 
 
@@ -196,34 +193,35 @@ class SignupPage(tk.Tk):
             # Creates a text file with the Username and password
             user = entry_user.get()
             pw = entry_pw.get()
-            validation = validate_user(user)
+            validation = 1
             if not validation:
                 tk.messagebox.showerror("Information", "That Username already exists")
             else:
-                if len(pw) > 3:
+                if len(pw) > 15:
                     credentials = open("credentials.txt", "a")
-                    credentials.write(f"Username,{user},Password,{pw},\n")
+                    credentials.write(f"Username,{user},Password,{pw},")
                     keypublic,keyprivate = generate_keypair()
-                    credentials.write(f"Keypublic,{keypublic},keyprivate,{keyprivate},\n")
+                    keyprivate,vector = EncryptAES(keyprivate,pw)
                     credentials.close()
+                    cursor.execute("insert into user values ('%s', '%s', '%s', '%s','%s')"%(user,pw,keypublic,keyprivate,vector))
                     tk.messagebox.showinfo("Information", "Your account details have been stored.")
                     SignupPage.destroy(self)
 
                 else:
-                    tk.messagebox.showerror("Information", "Your password needs to be longer than 3 values.")
+                    tk.messagebox.showerror("Information", "Your password needs to be longer than 15 values.")
             
 
-        def validate_user(username):
-            # Checks the text file for a username/password combination.
-            try:
-                with open("credentials.txt", "r") as credentials:
-                    for line in credentials:
-                        line = line.split(",")
-                        if line[1] == username:
-                            return False
-                return True
-            except FileNotFoundError:
-                return True
+        #def validate_user(username):
+         #   # Checks the text file for a username/password combination.
+          #  try:
+           #     with open("credentials.txt", "r") as credentials:
+            #        for line in credentials:
+             #           line = line.split(",")
+              #          if line[1] == username:
+               #             return False
+                #return True
+            #except FileNotFoundError:
+                #return True
         def generate_keypair():
             key = rsa.generate_private_key(
                 backend=crypto_default_backend(),
@@ -234,18 +232,19 @@ class SignupPage(tk.Tk):
                         crypto_serialization.Encoding.PEM,
                         crypto_serialization.PrivateFormat.TraditionalOpenSSL,
                         crypto_serialization.NoEncryption()
-            ).decode("utf-8")
+            )
             public_key = key.public_key().public_bytes(
                        crypto_serialization.Encoding.OpenSSH,
                        crypto_serialization.PublicFormat.OpenSSH
-            ).decode("utf-8")
+            ).decode('utf-8')
             return (public_key, private_key)
-        def EncryptAES(data,password):
-            secret_key = password[0:16]
+        def EncryptAES(key,password):
+            secret_key = password[0:16].encode('utf-8')
             cipher = AES.new(secret_key,AES.MODE_CBC)
-            data_encrypt = unpad(cipher.encrypt(pad(data),AES.block_size))
+            data_encrypt = cipher.encrypt(pad(key,AES.block_size))
             iv = b64encode(cipher.iv).decode('utf-8')
-            return data_encrypt 
+            data_encrypt = key.decode('utf-8')
+            return data_encrypt,iv
 class MenuBar(tk.Menu):
     def __init__(self, parent):
         tk.Menu.__init__(self, parent)
