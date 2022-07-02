@@ -13,6 +13,8 @@ from base64 import b64encode
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 import json
+from tkinter import filedialog
+
 
 
 load_dotenv()
@@ -245,6 +247,11 @@ class SignupPage(tk.Tk):
             iv = b64encode(cipher.iv).decode('utf-8')
             data_encrypt = key.decode('utf-8')
             return data_encrypt,iv
+        def DecryptAES(data_encrypt,password,iv):
+            secret_key = password[0:16].encode('utf-8')
+            cipher = AES.new(secret_key,AES.MODE_CBC,iv)
+            data = unpad(cipher.decrypt(data_encrypt),AES.block_size)
+            return data
 class MenuBar(tk.Menu):
     def __init__(self, parent):
         tk.Menu.__init__(self, parent)
@@ -273,6 +280,7 @@ class MenuBar(tk.Menu):
         menu_help = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Menu6", menu=menu_help)
         menu_help.add_command(label="Open New Window", command=lambda: parent.OpenNewWindow())
+    
 
 
 class MyApp(tk.Tk):
@@ -318,11 +326,23 @@ class GUI(tk.Frame):
 
 
 class Some_Widgets(GUI):  # inherits from the GUI class
-    def open_file():
-        file_path = askopenfile(mode='r', filetypes=[('Files','*doc')])
-        if file_path is not None:
-            pass
+    
     def __init__(self, parent, controller):
+        def Encryptfile():
+            key_session = get_random_bytes(16)
+            cipher = AES.new(key_session, AES.MODE_CBC)           
+            messagebox.showinfo( "", "select one or more files to encrypt")
+            filepath = filedialog.askopenfilenames()
+            for x in filepath:
+                with open(x, "rb") as file:
+                     original = file.read()
+                     data_encrypt = cipher.encrypt(pad(original,AES.block_size))
+                with open(x, "wb") as encrypted_file:
+                     encrypted_file.write(data_encrypt)
+            if not filepath:
+               messagebox.showerror("Error", "no file was selected, try again")
+            else:
+               messagebox.showinfo( "", "files encrypted successfully!")
         GUI.__init__(self, parent)
 
         frame1 = tk.LabelFrame(self, frame_styles, text="This is a LabelFrame containing a Treeview")
@@ -331,7 +351,7 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         frame2 = tk.LabelFrame(self, frame_styles, text="Some widgets")
         frame2.place(rely=0.05, relx=0.45, height=500, width=500)
 
-        button1 = tk.Button(frame2, text="upload file", command=lambda: Refresh_data())
+        button1 = tk.Button(frame2, text="upload file", command=Encryptfile)
         button1.pack()
         button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
         button2.pack()
@@ -383,6 +403,7 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         treescroll.configure(command=tv1.yview)
         tv1.configure(yscrollcommand=treescroll.set)
         treescroll.pack(side="right", fill="y")
+        
 
         def Load_data():
             for row in pokemon_info:
@@ -394,6 +415,7 @@ class Some_Widgets(GUI):  # inherits from the GUI class
             Load_data()
 
         Load_data()
+    
 
 
 class PageOne(GUI):
@@ -464,3 +486,4 @@ root.title("Tkinter App Template")
 root.mainloop()
 # disconnect from server
 db.close()
+
