@@ -318,6 +318,10 @@ class GUI(tk.Frame):
 
 
 class Some_Widgets(GUI):  # inherits from the GUI class
+    def open_file():
+        file_path = askopenfile(mode='r', filetypes=[('Files','*doc')])
+        if file_path is not None:
+            pass
     def __init__(self, parent, controller):
         GUI.__init__(self, parent)
 
@@ -327,7 +331,7 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         frame2 = tk.LabelFrame(self, frame_styles, text="Some widgets")
         frame2.place(rely=0.05, relx=0.45, height=500, width=500)
 
-        button1 = tk.Button(frame2, text="tk button", command=lambda: Refresh_data())
+        button1 = tk.Button(frame2, text="upload file", command=lambda: Refresh_data())
         button1.pack()
         button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
         button2.pack()
@@ -345,8 +349,8 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         Cbutton3.pack()
 
         Lbox1 = tk.Listbox(frame2, selectmode="multiple")
-        Lbox1.insert(1, "This is a tk ListBox")
-        Lbox1.insert(2, "Github")
+        Lbox1.insert(1, "file1")
+        Lbox1.insert(2, "file2")
         Lbox1.insert(3, "Python")
         Lbox1.insert(3, "StackOverflow")
         Lbox1.pack(side="left")
@@ -422,6 +426,10 @@ class PageTwo(GUI):
 
         label1 = tk.Label(self.main_frame, font=("Verdana", 20), text="Page Two")
         label1.pack(side="top")
+    def open_file():
+        file_path = askopenfile(mode='r', filetypes=[('Files to encrypt','*doc')])
+        if file_path is not None:
+            pass
 
 
 class OpenNewWindow(tk.Tk):
