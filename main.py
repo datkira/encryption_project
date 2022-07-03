@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import os
 import tkinter as tk
@@ -5,13 +6,16 @@ import uuid
 from base64 import b64encode
 from tkinter import messagebox
 from tkinter import ttk
+from tkinter.filedialog import askopenfile
 
+import cryptography
 import pymysql
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
-from cryptography.hazmat.backends import default_backend as crypto_default_backend
-from cryptography.hazmat.primitives import serialization as crypto_serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend as crypto_default_backend, default_backend
+from cryptography.hazmat.primitives import serialization as crypto_serialization, serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,9 +40,9 @@ def loadModel():
         dob VARCHAR(255) NOT NULL,
         data VARCHAR(255) ,
         data_encrypt VARCHAR(255) ,
-        public_key VARCHAR(255),
-        private_key VARCHAR(255),
-        secret_key VARCHAR(255) ,
+        key_public VARCHAR(2048) NOT NULL,
+        key_private VARCHAR(2048) NOT NULL,
+        vector_iv VARCHAR(2048) ,
         PRIMARY KEY (id)
     )""")
 
@@ -116,9 +120,68 @@ class LoginPage(tk.Tk):
                 return False
             else:
                 if check_password(user[2], password):
+                    signFileSHA256()
+                    # verifySignSHA256()
                     return True
                 else:
                     return False
+
+
+def signFileSHA256():
+    cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
+    user = cursor.fetchone()
+    with open('private.key', 'rb') as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend(),
+        )
+
+    # Load the contents of the file to be signed.
+    with open('signed-text.txt', 'rb') as f:
+        payload = f.read()
+        print(payload)
+
+    # Sign the payload file.
+    signature = base64.b64encode(
+        private_key.sign(
+            payload,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+    )
+
+    with open('signature.sig', 'wb') as f:
+        f.write(signature)
+
+
+def verifySignSHA256():
+    # Load the public key.
+    cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
+    user = cursor.fetchone()
+
+
+    with open('public.pem', 'rb') as f:
+        public_key = load_pem_public_key(f.read(), default_backend())
+    # Load the payload contents and the signature.
+    with open('signed-text.txt', 'rb') as f:
+        payload_contents = f.read()
+    with open('signature.sig', 'rb') as f:
+        signature = base64.b64decode(f.read())
+
+        # Perform the verification.
+        public_key.verify(
+            signature,
+            payload_contents,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
 
 
 class SignupPage(tk.Tk):
@@ -197,11 +260,22 @@ class SignupPage(tk.Tk):
             else:
                 password = hash_password(pw)
                 # log password console
-                sql = "INSERT INTO user (email, password, name, dob, phone, address) VALUES (%s, %s, %s, %s, %s, %s)"
-                val = (email, password, name, dob, phone, address)
+
+                credentials = open("credentials.txt", "a")
+                credentials.write(f"Email,{email},Password,{pw},\n")
+                keypublic, keyprivate = generate_keypair()
+                credentials.write(f"Keypublic,{keypublic},keyprivate,{keyprivate},\n")
+                credentials.close()
+                credentials = open("credentials.txt", "a")
+                keyprivate, vector = EncryptAES(keyprivate, password)
+                credentials.close()
+                sql = "INSERT INTO user (email, password, name, dob, phone, address, key_public, key_private, vector_iv) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                val = (email, password, name, dob, phone, address, keypublic, keyprivate, vector)
                 cursor.execute(sql, val)
                 db.commit()
                 tk.messagebox.showinfo("Registration Successful", "Welcome {}".format(email))
+                global emailGlobal
+                emailGlobal = email
                 root.deiconify()
                 top.destroy()
 
@@ -224,19 +298,20 @@ class SignupPage(tk.Tk):
                 crypto_serialization.Encoding.PEM,
                 crypto_serialization.PrivateFormat.TraditionalOpenSSL,
                 crypto_serialization.NoEncryption()
-            ).decode("utf-8")
+            )
             public_key = key.public_key().public_bytes(
                 crypto_serialization.Encoding.OpenSSH,
                 crypto_serialization.PublicFormat.OpenSSH
-            ).decode("utf-8")
+            ).decode('utf-8')
             return (public_key, private_key)
 
-        def EncryptAES(data, password):
-            secret_key = password[0:16]
+        def EncryptAES(key, password):
+            secret_key = password[0:16].encode('utf-8')
             cipher = AES.new(secret_key, AES.MODE_CBC)
-            data_encrypt = unpad(cipher.encrypt(pad(data), AES.block_size))
+            data_encrypt = cipher.encrypt(pad(key, AES.block_size))
             iv = b64encode(cipher.iv).decode('utf-8')
-            return data_encrypt
+            data_encrypt = key.decode('utf-8')
+            return data_encrypt, iv
 
 
 class UpdatePageRegular(tk.Tk):
@@ -299,7 +374,6 @@ class UpdatePageRegular(tk.Tk):
             dob = entry_dob.get()
             phone = entry_phone.get()
             address = entry_address.get()
-            print(emailGlobal)
             # log password console
             sql = "UPDATE user SET name = %s, dob = %s, phone = %s, address = %s WHERE email = %s"
             val = (name, dob, phone, address, emailGlobal)
@@ -436,6 +510,11 @@ class GUI(tk.Frame):
 
 
 class Some_Widgets(GUI):  # inherits from the GUI class
+    def open_file():
+        file_path = askopenfile(mode='r', filetypes=[('Files', '*doc')])
+        if file_path is not None:
+            pass
+
     def __init__(self, parent, controller):
         GUI.__init__(self, parent)
 
@@ -446,7 +525,7 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         frame2 = tk.LabelFrame(self, frame_styles, text="Some widgets")
         frame2.place(rely=0.05, relx=0.45, height=500, width=500)
 
-        button1 = tk.Button(frame2, text="tk button", command=lambda: Refresh_data())
+        button1 = tk.Button(frame2, text="upload file", command=lambda: Refresh_data())
         button1.pack()
         button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
         button2.pack()
@@ -464,8 +543,8 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         Cbutton3.pack()
 
         Lbox1 = tk.Listbox(frame2, selectmode="multiple")
-        Lbox1.insert(1, "This is a tk ListBox")
-        Lbox1.insert(2, "Github")
+        Lbox1.insert(1, "file1")
+        Lbox1.insert(2, "file2")
         Lbox1.insert(3, "Python")
         Lbox1.insert(3, "StackOverflow")
         Lbox1.pack(side="left")
@@ -538,51 +617,14 @@ class PageFour(GUI):
 class PageTwo(GUI):
     def __init__(self, parent, controller):
         GUI.__init__(self, parent)
-        text_styles = {"font": ("Verdana", 10)}
+
         label1 = tk.Label(self.main_frame, font=("Verdana", 20), text="Page Two")
         label1.pack(side="top")
 
-        main_frame = tk.Frame(self)
-        # pack_propagate prevents the window resizing to match the widgets
-        # change information form
-        label_email = tk.Label(main_frame, text_styles, text="New Email:")
-        label_email.grid(row=1, column=0)
-
-        label_pw = tk.Label(main_frame, text_styles, text="New Password:")
-        label_pw.grid(row=2, column=0)
-
-        label_name = tk.Label(main_frame, text_styles, text="Name:")
-        label_name.grid(row=3, column=0)
-
-        # date of birth
-        label_dob = tk.Label(main_frame, text_styles, text="Date of Birth:")
-        label_dob.grid(row=4, column=0)
-
-        # phone
-        label_phone = tk.Label(main_frame, text_styles, text="Phone:")
-        label_phone.grid(row=5, column=0)
-
-        # address
-        label_address = tk.Label(main_frame, text_styles, text="Address:")
-        label_address.grid(row=6, column=0)
-
-        entry_email = ttk.Entry(main_frame, width=20, cursor="xterm")
-        entry_email.grid(row=1, column=1)
-
-        entry_pw = ttk.Entry(main_frame, width=20, cursor="xterm", show="*")
-        entry_pw.grid(row=2, column=1)
-
-        entry_name = ttk.Entry(main_frame, width=20, cursor="xterm")
-        entry_name.grid(row=3, column=1)
-
-        entry_dob = ttk.Entry(main_frame, width=20, cursor="xterm")
-        entry_dob.grid(row=4, column=1)
-
-        entry_phone = ttk.Entry(main_frame, width=20, cursor="xterm")
-        entry_phone.grid(row=5, column=1)
-
-        entry_address = ttk.Entry(main_frame, width=20, cursor="xterm")
-        main_frame.pack(side="top")
+    def open_file(self):
+        file_path = askopenfile(mode='r', filetypes=[('Files to encrypt', '*doc')])
+        if file_path is not None:
+            pass
 
 
 class OpenNewWindow(tk.Tk):
