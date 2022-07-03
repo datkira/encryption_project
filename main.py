@@ -1,17 +1,20 @@
+import hashlib
 import base64
 import hashlib
 import os
 import tkinter as tk
 import uuid
 from base64 import b64encode
+from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
 from tkinter.filedialog import askopenfile
 
-import cryptography
 import pymysql
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import unpad
 from cryptography.hazmat.backends import default_backend as crypto_default_backend, default_backend
 from cryptography.hazmat.primitives import serialization as crypto_serialization, serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -43,7 +46,7 @@ def loadModel():
         key_public VARCHAR(2048) NOT NULL,
         key_private VARCHAR(2048) NOT NULL,
         vector_iv VARCHAR(2048) ,
-        PRIMARY KEY (id)
+        PRIMARY KEY (username)
     )""")
 
 
@@ -120,68 +123,11 @@ class LoginPage(tk.Tk):
                 return False
             else:
                 if check_password(user[2], password):
-                    signFileSHA256()
+                    # signFileSHA256()
                     # verifySignSHA256()
                     return True
                 else:
                     return False
-
-
-def signFileSHA256():
-    cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
-    user = cursor.fetchone()
-    with open('private.key', 'rb') as key_file:
-        private_key = serialization.load_pem_private_key(
-            key_file.read(),
-            password=None,
-            backend=default_backend(),
-        )
-
-    # Load the contents of the file to be signed.
-    with open('signed-text.txt', 'rb') as f:
-        payload = f.read()
-        print(payload)
-
-    # Sign the payload file.
-    signature = base64.b64encode(
-        private_key.sign(
-            payload,
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH,
-            ),
-            hashes.SHA256(),
-        )
-    )
-
-    with open('signature.sig', 'wb') as f:
-        f.write(signature)
-
-
-def verifySignSHA256():
-    # Load the public key.
-    cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
-    user = cursor.fetchone()
-
-
-    with open('public.pem', 'rb') as f:
-        public_key = load_pem_public_key(f.read(), default_backend())
-    # Load the payload contents and the signature.
-    with open('signed-text.txt', 'rb') as f:
-        payload_contents = f.read()
-    with open('signature.sig', 'rb') as f:
-        signature = base64.b64decode(f.read())
-
-        # Perform the verification.
-        public_key.verify(
-            signature,
-            payload_contents,
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH,
-            ),
-            hashes.SHA256(),
-        )
 
 
 class SignupPage(tk.Tk):
@@ -311,6 +257,13 @@ class SignupPage(tk.Tk):
             data_encrypt = cipher.encrypt(pad(key, AES.block_size))
             iv = b64encode(cipher.iv).decode('utf-8')
             data_encrypt = key.decode('utf-8')
+            return data_encrypt, iv
+
+        def DecryptAES(data_encrypt, password, iv):
+            secret_key = password[0:16].encode('utf-8')
+            cipher = AES.new(secret_key, AES.MODE_CBC, iv)
+            data = unpad(cipher.decrypt(data_encrypt), AES.block_size)
+            return data
             return data_encrypt, iv
 
 
@@ -503,29 +456,54 @@ class MyApp(tk.Tk):
 class GUI(tk.Frame):
     def __init__(self, parent):
         tk.Frame.__init__(self, parent)
-        self.main_frame = tk.Frame(self, height=600, width=1024)
+        self.main_frame = tk.Frame(self, bg="#BEB2A7", height=600, width=1024)
+        # self.main_frame.pack_propagate(0)
         self.main_frame.pack(fill="both", expand="true")
         self.main_frame.grid_rowconfigure(0, weight=1)
         self.main_frame.grid_columnconfigure(0, weight=1)
 
 
 class Some_Widgets(GUI):  # inherits from the GUI class
-    def open_file():
-        file_path = askopenfile(mode='r', filetypes=[('Files', '*doc')])
-        if file_path is not None:
-            pass
 
     def __init__(self, parent, controller):
+        def Encryptfile():
+            key_session = get_random_bytes(16)
+            cipher = AES.new(key_session, AES.MODE_CBC)
+            messagebox.showinfo("", "select one or more files to encrypt")
+            filepath = filedialog.askopenfilenames()
+            for x in filepath:
+                with open(x, "rb") as file:
+                    original = file.read()
+                    data_encrypt = cipher.encrypt(pad(original, AES.block_size))
+                    iv = b64encode(cipher.iv)
+                with open(x, "wb") as encrypted_file:
+                    encrypted_file.write(data_encrypt)
+                    # encrypted_file.write(b"\n")
+                    # encrypted_file.write(key_session)
+            if not filepath:
+                messagebox.showerror("Error", "no file was selected, try again")
+            else:
+                messagebox.showinfo("", "files encrypted successfully!")
+            return key_session, iv
+
+        def Decryptfile(key_session, iv):
+            messagebox.showinfo("", "select one or more files to decrypt")
+            filepath = filedialog.askopenfilenames()
+            cipher = AES.new(key_session, AES.MODE_CBC, iv)
+            for x in filepath:
+                with open(x, "rb") as file:
+                    original = file.read()
+                    data_decrypt = unpad(cipher.decrypt(original), AES.block_size)
+
         GUI.__init__(self, parent)
 
-        frame1 = tk.LabelFrame(self, frame_styles, text="Change information")
-
+        frame1 = tk.LabelFrame(self, frame_styles, text="This is a LabelFrame containing a Treeview")
         frame1.place(rely=0.05, relx=0.02, height=400, width=400)
 
         frame2 = tk.LabelFrame(self, frame_styles, text="Some widgets")
         frame2.place(rely=0.05, relx=0.45, height=500, width=500)
 
-        button1 = tk.Button(frame2, text="upload file", command=lambda: Refresh_data())
+        button1 = tk.Button(frame2, text="upload file", command=lambda: Encryptfile())
         button1.pack()
         button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
         button2.pack()
@@ -621,7 +599,7 @@ class PageTwo(GUI):
         label1 = tk.Label(self.main_frame, font=("Verdana", 20), text="Page Two")
         label1.pack(side="top")
 
-    def open_file(self):
+    def open_file():
         file_path = askopenfile(mode='r', filetypes=[('Files to encrypt', '*doc')])
         if file_path is not None:
             pass
