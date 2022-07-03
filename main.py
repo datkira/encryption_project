@@ -9,6 +9,7 @@ from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
 from tkinter.filedialog import askopenfile
+from base64 import b64decode
 
 import pymysql
 from Crypto.Cipher import AES
@@ -46,7 +47,7 @@ def loadModel():
         key_public VARCHAR(2048) NOT NULL,
         key_private VARCHAR(2048) NOT NULL,
         vector_iv VARCHAR(2048) ,
-        PRIMARY KEY (username)
+        PRIMARY KEY (id)
     )""")
 
 
@@ -255,16 +256,16 @@ class SignupPage(tk.Tk):
             secret_key = password[0:16].encode('utf-8')
             cipher = AES.new(secret_key, AES.MODE_CBC)
             data_encrypt = cipher.encrypt(pad(key, AES.block_size))
-            iv = b64encode(cipher.iv).decode('utf-8')
+            iv = cipher.iv
+            iv = key.decode('utf-8')
             data_encrypt = key.decode('utf-8')
             return data_encrypt, iv
 
         def DecryptAES(data_encrypt, password, iv):
             secret_key = password[0:16].encode('utf-8')
             cipher = AES.new(secret_key, AES.MODE_CBC, iv)
-            data = unpad(cipher.decrypt(data_encrypt), AES.block_size)
-            return data
-            return data_encrypt, iv
+            data_encrypt = unpad(cipher.decrypt(data_encrypt), AES.block_size)
+            return data_encrypt
 
 
 class UpdatePageRegular(tk.Tk):
@@ -469,31 +470,42 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         def Encryptfile():
             key_session = get_random_bytes(16)
             cipher = AES.new(key_session, AES.MODE_CBC)
-            messagebox.showinfo("", "select one or more files to encrypt")
+            iv = cipher.iv
+            messagebox.showinfo("", "select file to encrypt")
             filepath = filedialog.askopenfilenames()
             for x in filepath:
                 with open(x, "rb") as file:
                     original = file.read()
                     data_encrypt = cipher.encrypt(pad(original, AES.block_size))
-                    iv = b64encode(cipher.iv)
                 with open(x, "wb") as encrypted_file:
+                    encrypted_file.write(key_session)
+                    encrypted_file.write(iv)
                     encrypted_file.write(data_encrypt)
-                    # encrypted_file.write(b"\n")
-                    # encrypted_file.write(key_session)
+
+                    
             if not filepath:
                 messagebox.showerror("Error", "no file was selected, try again")
             else:
                 messagebox.showinfo("", "files encrypted successfully!")
-            return key_session, iv
-
-        def Decryptfile(key_session, iv):
+        def Decryptfile():
             messagebox.showinfo("", "select one or more files to decrypt")
             filepath = filedialog.askopenfilenames()
+            for x in filepath:
+                with open(x, "rb") as file:
+                    key_session = file.read(16)
+                    iv = file.read(16)
+                    content = file.read()
             cipher = AES.new(key_session, AES.MODE_CBC, iv)
             for x in filepath:
                 with open(x, "rb") as file:
-                    original = file.read()
-                    data_decrypt = unpad(cipher.decrypt(original), AES.block_size)
+                    data_decrypt = unpad(cipher.decrypt(content), AES.block_size)
+                with open(x, "wb") as encrypted_file:
+                    encrypted_file.write(data_decrypt)
+            if not filepath:
+                messagebox.showerror("Error", "no file was selected, try again")
+            else:
+                messagebox.showinfo("", "files decrypted successfully!")
+
 
         GUI.__init__(self, parent)
 
@@ -503,9 +515,9 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         frame2 = tk.LabelFrame(self, frame_styles, text="Some widgets")
         frame2.place(rely=0.05, relx=0.45, height=500, width=500)
 
-        button1 = tk.Button(frame2, text="upload file", command=lambda: Encryptfile())
+        button1 = tk.Button(frame2, text="Upload file", command=lambda: Encryptfile())
         button1.pack()
-        button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
+        button2 = ttk.Button(frame2, text="Decrypt file", command=lambda: Decryptfile())
         button2.pack()
 
         Var1 = tk.IntVar()
