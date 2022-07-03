@@ -1,3 +1,4 @@
+import binascii
 import hashlib
 import base64
 import hashlib
@@ -9,6 +10,7 @@ from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
 from tkinter.filedialog import askopenfile
+from base64 import b64decode
 
 import pymysql
 from Crypto.Cipher import AES
@@ -44,20 +46,34 @@ def loadModel():
         data VARCHAR(255) ,
         data_encrypt VARCHAR(255) ,
         key_public VARCHAR(2048) NOT NULL,
-        key_private VARCHAR(2048) NOT NULL,
+        key_private LONGTEXT NOT NULL,
         vector_iv VARCHAR(2048) ,
-        PRIMARY KEY (username)
+        PRIMARY KEY (id)
     )""")
-
-
-# You can also use a pandas dataframe for pokemon_info.
-# you can convert the dataframe using df.to_numpy.tolist()
-pokemon_info = []
 
 frame_styles = {"relief": "groove",
                 "bd": 3,
                 "fg": "#073bb3", "font": ("Arial", 9, "bold")}
 
+
+def EncryptAES(key, password):
+    secret_key = password[0:16].encode('utf-8')
+    cipher = AES.new(secret_key, AES.MODE_CBC)
+    data_encrypt = cipher.encrypt(pad(key, AES.block_size))
+    iv = cipher.iv
+    iv = iv.hex()
+    data_encrypt = data_encrypt.hex()
+    return data_encrypt, iv
+
+
+def DecryptAES(data_encrypt, password, iv):
+    # convert hex to byte
+    iv = bytes.fromhex(iv)
+    data_encrypt = bytes.fromhex(data_encrypt)
+    secret_key = password[0:16].encode('utf-8')
+    cipher = AES.new(secret_key, AES.MODE_CBC, iv)
+    data_encrypt = unpad(cipher.decrypt(data_encrypt), AES.block_size)
+    return data_encrypt
 
 class LoginPage(tk.Tk):
 
@@ -207,14 +223,8 @@ class SignupPage(tk.Tk):
                 password = hash_password(pw)
                 # log password console
 
-                credentials = open("credentials.txt", "a")
-                credentials.write(f"Email,{email},Password,{pw},\n")
                 keypublic, keyprivate = generate_keypair()
-                credentials.write(f"Keypublic,{keypublic},keyprivate,{keyprivate},\n")
-                credentials.close()
-                credentials = open("credentials.txt", "a")
                 keyprivate, vector = EncryptAES(keyprivate, password)
-                credentials.close()
                 sql = "INSERT INTO user (email, password, name, dob, phone, address, key_public, key_private, vector_iv) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 val = (email, password, name, dob, phone, address, keypublic, keyprivate, vector)
                 cursor.execute(sql, val)
@@ -251,20 +261,7 @@ class SignupPage(tk.Tk):
             ).decode('utf-8')
             return (public_key, private_key)
 
-        def EncryptAES(key, password):
-            secret_key = password[0:16].encode('utf-8')
-            cipher = AES.new(secret_key, AES.MODE_CBC)
-            data_encrypt = cipher.encrypt(pad(key, AES.block_size))
-            iv = b64encode(cipher.iv).decode('utf-8')
-            data_encrypt = key.decode('utf-8')
-            return data_encrypt, iv
 
-        def DecryptAES(data_encrypt, password, iv):
-            secret_key = password[0:16].encode('utf-8')
-            cipher = AES.new(secret_key, AES.MODE_CBC, iv)
-            data = unpad(cipher.decrypt(data_encrypt), AES.block_size)
-            return data
-            return data_encrypt, iv
 
 
 class UpdatePageRegular(tk.Tk):
@@ -364,8 +361,18 @@ class UpdatePagePassword(tk.Tk):
         button = ttk.Button(main_frame, text="Update password", command=lambda: update())
         button.grid(row=7, column=1)
 
-        def update():  # @TODO update the password
+        def update():
+            cursor.execute("SELECT * FROM user WHERE email = '%s'" % emailGlobal)
+            user = cursor.fetchone()
             password = entry_pw.get()
+            new_password = hash_password(password)
+            keyprivateBeforeEncrypt = DecryptAES(user[10], user[2], user[11])
+            keyprivate, vector = EncryptAES(keyprivateBeforeEncrypt, password)
+            cursor.execute("UPDATE user SET password = %s, key_private = %s, vector_iv = %s WHERE email = %s",
+                           (new_password, keyprivate, vector, emailGlobal))
+            db.commit()
+            tk.messagebox.showinfo("Update Successfully", "You updated your password {}".format(emailGlobal))
+            root.deiconify()
             # Trường hợp đổi passphase cần đảm bảo cặp khoá Kprivate, Kpublic không bị thay đổi. Tức
             # là khoá Kprivate được mã hoá ở bước 2.2 với passphase cũ, cần được mã hoá lại với
             # passphase mới
@@ -376,25 +383,10 @@ class MenuBar(tk.Menu):
         tk.Menu.__init__(self, parent)
 
         menu_file = tk.Menu(self, tearoff=0)
-        self.add_cascade(label="Menu1", menu=menu_file)
-        menu_file.add_command(label="All Widgets", command=lambda: parent.show_frame(Some_Widgets))
+        self.add_cascade(label="Home", menu=menu_file)
+        menu_file.add_command(label="Features", command=lambda: parent.show_frame(Some_Widgets))
         menu_file.add_separator()
         menu_file.add_command(label="Exit Application", command=lambda: parent.Quit_application())
-
-        menu_orders = tk.Menu(self, tearoff=0)
-        self.add_cascade(label="Menu2", menu=menu_orders)
-
-        menu_pricing = tk.Menu(self, tearoff=0)
-        self.add_cascade(label="Menu3", menu=menu_pricing)
-        menu_pricing.add_command(label="Page One", command=lambda: parent.show_frame(PageOne))
-
-        menu_operations = tk.Menu(self, tearoff=0)
-        self.add_cascade(label="Menu4", menu=menu_operations)
-        menu_operations.add_command(label="Page Two", command=lambda: parent.show_frame(PageTwo))
-        menu_positions = tk.Menu(menu_operations, tearoff=0)
-        menu_operations.add_cascade(label="Menu5", menu=menu_positions)
-        menu_positions.add_command(label="Page Three", command=lambda: parent.show_frame(PageThree))
-        menu_positions.add_command(label="Page Four", command=lambda: parent.show_frame(PageFour))
 
         menu_help = tk.Menu(self, tearoff=0)
         self.add_cascade(label="Update information", menu=menu_help)
@@ -469,103 +461,121 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         def Encryptfile():
             key_session = get_random_bytes(16)
             cipher = AES.new(key_session, AES.MODE_CBC)
-            messagebox.showinfo("", "select one or more files to encrypt")
+            iv = cipher.iv
+            messagebox.showinfo("", "select file to encrypt")
             filepath = filedialog.askopenfilenames()
             for x in filepath:
                 with open(x, "rb") as file:
                     original = file.read()
                     data_encrypt = cipher.encrypt(pad(original, AES.block_size))
-                    iv = b64encode(cipher.iv)
                 with open(x, "wb") as encrypted_file:
+                    encrypted_file.write(key_session)
+                    encrypted_file.write(iv)
                     encrypted_file.write(data_encrypt)
-                    # encrypted_file.write(b"\n")
-                    # encrypted_file.write(key_session)
+
             if not filepath:
                 messagebox.showerror("Error", "no file was selected, try again")
             else:
                 messagebox.showinfo("", "files encrypted successfully!")
-            return key_session, iv
 
-        def Decryptfile(key_session, iv):
+        def Decryptfile():
             messagebox.showinfo("", "select one or more files to decrypt")
             filepath = filedialog.askopenfilenames()
+            for x in filepath:
+                with open(x, "rb") as file:
+                    key_session = file.read(16)
+                    iv = file.read(16)
+                    content = file.read()
             cipher = AES.new(key_session, AES.MODE_CBC, iv)
             for x in filepath:
                 with open(x, "rb") as file:
-                    original = file.read()
-                    data_decrypt = unpad(cipher.decrypt(original), AES.block_size)
+                    data_decrypt = unpad(cipher.decrypt(content), AES.block_size)
+                with open(x, "wb") as encrypted_file:
+                    encrypted_file.write(data_decrypt)
+            if not filepath:
+                messagebox.showerror("Error", "no file was selected, try again")
+            else:
+                messagebox.showinfo("", "files decrypted successfully!")
+
+        def SignFile():
+            messagebox.showinfo("", "select one or more files to sign")
+            filepath = filedialog.askopenfilenames()
+            for x in filepath:
+                cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
+                user = cursor.fetchone()
+                print('DecryptAES(user[10], user[2], user[11]): ', DecryptAES(user[10], user[2], user[11]))
+                # convert hex to ascii
+                private_key_after_decrypt = DecryptAES(user[10], user[2], user[11])
+                # convert private_key_after_decrypt to ascii
+                private_key = serialization.load_pem_private_key(
+                    private_key_after_decrypt,
+                    password=None,
+                    backend=default_backend(),
+                )
+
+                # Create new sign file and write the data to it
+                with open(x, "rb") as fileOrigin:
+                    payload = fileOrigin.read()
+                    print(payload)
+
+                # Sign the payload file.
+                signature = base64.b64encode(
+                    private_key.sign(
+                        payload,
+                        padding.PSS(
+                            mgf=padding.MGF1(hashes.SHA256()),
+                            salt_length=padding.PSS.MAX_LENGTH,
+                        ),
+                        hashes.SHA256(),
+                    )
+                )
+
+                with open(x + ".sign", 'wb') as sign_file:
+                    sign_file.write(signature)
+            if not filepath:
+                messagebox.showerror("Error", "no file was selected, try again")
+            else:
+                messagebox.showinfo("", "files sign successfully!")
+            return True
+
+        def VerifySignSHA256():
+            messagebox.showinfo("", "select one or more files to sign")
+            filepath = filedialog.askopenfilenames()
+            # Load the public key.
+            cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
+            user = cursor.fetchone()
+            print('filepath: ', filepath)
+            for x in filepath:
+                public_key = load_pem_public_key(user[9].encode('ascii'), default_backend())
+                # Load the payload contents and the signature.
+                with open(x, 'rb') as f:
+                    payload_contents = f.read()
+                with open('signature.sig', 'rb') as f:
+                    signature = base64.b64decode(f.read())
+
+                    # Perform the verification.
+                    public_key.verify(
+                        signature,
+                        payload_contents,
+                        padding.PSS(
+                            mgf=padding.MGF1(hashes.SHA256()),
+                            salt_length=padding.PSS.MAX_LENGTH,
+                        ),
+                        hashes.SHA256(),
+                    )
 
         GUI.__init__(self, parent)
 
-        frame1 = tk.LabelFrame(self, frame_styles, text="This is a LabelFrame containing a Treeview")
-        frame1.place(rely=0.05, relx=0.02, height=400, width=400)
-
-        frame2 = tk.LabelFrame(self, frame_styles, text="Some widgets")
-        frame2.place(rely=0.05, relx=0.45, height=500, width=500)
-
-        button1 = tk.Button(frame2, text="upload file", command=lambda: Encryptfile())
+        frame2 = tk.LabelFrame(self, frame_styles, text="Features")
+        frame2.place(rely=0.05, relx=0.02, height=400, width=400)
+        button1 = tk.Button(frame2, text="Upload to encrypt file", command=lambda: Encryptfile())
         button1.pack()
-        button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
+        button2 = ttk.Button(frame2, text="Decrypt file", command=lambda: Decryptfile())
         button2.pack()
-
-        Var1 = tk.IntVar()
-        Var2 = tk.IntVar()
-        Cbutton1 = tk.Checkbutton(frame2, text="tk CheckButton1", variable=Var1, onvalue=1, offvalue=0)
-        Cbutton1.pack()
-        Cbutton2 = tk.Checkbutton(frame2, text="tk CheckButton2", variable=Var2, onvalue=1, offvalue=0)
-        Cbutton2.pack()
-
-        Cbutton3 = ttk.Checkbutton(frame2, text="ttk CheckButton1", variable=Var1, onvalue=1, offvalue=0)
-        Cbutton3.pack()
-        Cbutton3 = ttk.Checkbutton(frame2, text="ttk CheckButton2", variable=Var2, onvalue=1, offvalue=0)
-        Cbutton3.pack()
-
-        Lbox1 = tk.Listbox(frame2, selectmode="multiple")
-        Lbox1.insert(1, "file1")
-        Lbox1.insert(2, "file2")
-        Lbox1.insert(3, "Python")
-        Lbox1.insert(3, "StackOverflow")
-        Lbox1.pack(side="left")
-
-        Var3 = tk.IntVar()
-        R1 = tk.Radiobutton(frame2, text="tk Radiobutton1", variable=Var3, value=1)
-        R1.pack()
-        R2 = tk.Radiobutton(frame2, text="tk Radiobutton2", variable=Var3, value=2)
-        R2.pack()
-        R3 = tk.Radiobutton(frame2, text="tk Radiobutton3", variable=Var3, value=3)
-        R3.pack()
-
-        R4 = tk.Radiobutton(frame2, text="ttk Radiobutton1", variable=Var3, value=1)
-        R4.pack()
-        R5 = tk.Radiobutton(frame2, text="ttk Radiobutton2", variable=Var3, value=2)
-        R5.pack()
-        R6 = tk.Radiobutton(frame2, text="ttk Radiobutton3", variable=Var3, value=3)
-        R6.pack()
-
-        # This is a treeview.
-        tv1 = ttk.Treeview(frame1)
-        column_list_account = ["Name", "Type", "Base Stat Total"]
-        tv1['columns'] = column_list_account
-        tv1["show"] = "headings"  # removes empty column
-        for column in column_list_account:
-            tv1.heading(column, text=column)
-            tv1.column(column, width=50)
-        tv1.place(relheight=1, relwidth=0.995)
-        treescroll = tk.Scrollbar(frame1)
-        treescroll.configure(command=tv1.yview)
-        tv1.configure(yscrollcommand=treescroll.set)
-        treescroll.pack(side="right", fill="y")
-
-        def Load_data():
-            for row in pokemon_info:
-                tv1.insert("", "end", values=row)
-
-        def Refresh_data():
-            # Deletes the data in the current treeview and reinserts it.
-            tv1.delete(*tv1.get_children())  # *=splat operator
-            Load_data()
-
-        Load_data()
+        button4 = ttk.Button(frame2, text="upload file to sign", command=lambda: SignFile())
+        button4.pack()
+        button3 = ttk.Button(frame2, text="upload file to verify", command=lambda: VerifySignSHA256())
+        button3.pack()
 
 
 class PageOne(GUI):
@@ -618,12 +628,6 @@ class OpenNewWindow(tk.Tk):
         self.title("Here is the Title of the Window")
         self.geometry("500x500")
         self.resizable(0, 0)
-
-        frame1 = ttk.LabelFrame(main_frame, text="This is a ttk LabelFrame")
-        frame1.pack(expand=True, fill="both")
-
-        label1 = tk.Label(frame1, font=("Verdana", 20), text="OpenNewWindow Page")
-        label1.pack(side="top")
 
 
 loadModel()
