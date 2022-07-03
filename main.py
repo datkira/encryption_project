@@ -1,9 +1,25 @@
+import hashlib
+import base64
+import hashlib
+import os
 import tkinter as tk
+import uuid
+from base64 import b64encode
+from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
+from tkinter.filedialog import askopenfile
+
 import pymysql
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import unpad
+from cryptography.hazmat.backends import default_backend as crypto_default_backend, default_backend
+from cryptography.hazmat.primitives import serialization as crypto_serialization, serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 # need to create database "encryption_project" from command line before running this program
@@ -11,72 +27,35 @@ db = pymysql.connect(host=os.getenv('HOST'), user=os.getenv('DATABASE_USER'), pa
                      db=os.getenv('DATABASE_NAME'))
 cursor = db.cursor()
 
+# set email variable to null
+emailGlobal = None
+
 
 def loadModel():
     # create user table if not exists
     cursor.execute("""CREATE TABLE IF NOT EXISTS user (
         id INT(11) NOT NULL AUTO_INCREMENT,
-        username VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
         password VARCHAR(255) NOT NULL,
-        PRIMARY KEY (id)
+        name VARCHAR(255) NOT NULL,
+        address VARCHAR(255) NOT NULL,
+        phone VARCHAR(255) NOT NULL,
+        dob VARCHAR(255) NOT NULL,
+        data VARCHAR(255) ,
+        data_encrypt VARCHAR(255) ,
+        key_public VARCHAR(2048) NOT NULL,
+        key_private VARCHAR(2048) NOT NULL,
+        vector_iv VARCHAR(2048) ,
+        PRIMARY KEY (username)
     )""")
 
 
 # You can also use a pandas dataframe for pokemon_info.
 # you can convert the dataframe using df.to_numpy.tolist()
-pokemon_info = [['Bulbasaur', 'Grass', '318'], ['Ivysaur', 'Grass', '405'], ['Venusaur', 'Grass', '525'],
-                ['Charmander', 'Fire', '309'], ['Charmeleon', 'Fire', '405'], ['Charizard', 'Fire', '534'],
-                ['Squirtle', 'Water', '314'], ['Wartortle', 'Water', '405'], ['Blastoise', 'Water', '530'],
-                ['Caterpie', 'Bug', '195'], ['Metapod', 'Bug', '205'], ['Butterfree', 'Bug', '395'],
-                ['Weedle', 'Bug', '195'], ['Kakuna', 'Bug', '205'], ['Beedrill', 'Bug', '395'],
-                ['Pidgey', 'Normal', '251'], ['Pidgeotto', 'Normal', '349'], ['Pidgeot', 'Normal', '479'],
-                ['Rattata', 'Normal', '253'], ['Raticate', 'Normal', '413'], ['Spearow', 'Normal', '262'],
-                ['Fearow', 'Normal', '442'], ['Ekans', 'Poison', '288'], ['Arbok', 'Poison', '448'],
-                ['Pikachu', 'Electric', '320'], ['Raichu', 'Electric', '485'], ['Sandshrew', 'Ground', '300'],
-                ['Sandslash', 'Ground', '450'], ['Nidoran?', 'Poison', '275'], ['Nidorina', 'Poison', '365'],
-                ['Nidoqueen', 'Poison', '505'], ['Nidoran?', 'Poison', '273'], ['Nidorino', 'Poison', '365'],
-                ['Nidoking', 'Poison', '505'], ['Clefairy', 'Fairy', '323'], ['Clefable', 'Fairy', '483'],
-                ['Vulpix', 'Fire', '299'], ['Ninetales', 'Fire', '505'], ['Jigglypuff', 'Normal', '270'],
-                ['Wigglytuff', 'Normal', '435'], ['Zubat', 'Poison', '245'], ['Golbat', 'Poison', '455'],
-                ['Oddish', 'Grass', '320'], ['Gloom', 'Grass', '395'], ['Vileplume', 'Grass', '490'],
-                ['Paras', 'Bug', '285'], ['Parasect', 'Bug', '405'], ['Venonat', 'Bug', '305'],
-                ['Venomoth', 'Bug', '450'], ['Diglett', 'Ground', '265'], ['Dugtrio', 'Ground', '425'],
-                ['Meowth', 'Normal', '290'], ['Persian', 'Normal', '440'], ['Psyduck', 'Water', '320'],
-                ['Golduck', 'Water', '500'], ['Mankey', 'Fighting', '305'], ['Primeape', 'Fighting', '455'],
-                ['Growlithe', 'Fire', '350'], ['Arcanine', 'Fire', '555'], ['Poliwag', 'Water', '300'],
-                ['Poliwhirl', 'Water', '385'], ['Poliwrath', 'Water', '510'], ['Abra', 'Psychic', '310'],
-                ['Kadabra', 'Psychic', '400'], ['Alakazam', 'Psychic', '500'], ['Machop', 'Fighting', '305'],
-                ['Machoke', 'Fighting', '405'], ['Machamp', 'Fighting', '505'], ['Bellsprout', 'Grass', '300'],
-                ['Weepinbell', 'Grass', '390'], ['Victreebel', 'Grass', '490'], ['Tentacool', 'Water', '335'],
-                ['Tentacruel', 'Water', '515'], ['Geodude', 'Rock', '300'], ['Graveler', 'Rock', '390'],
-                ['Golem', 'Rock', '495'], ['Ponyta', 'Fire', '410'], ['Rapidash', 'Fire', '500'],
-                ['Slowpoke', 'Water', '315'], ['Slowbro', 'Water', '490'], ['Magnemite', 'Electric', '325'],
-                ['Magneton', 'Electric', '465'], ["Farfetch'd", 'Normal', '377'], ['Doduo', 'Normal', '310'],
-                ['Dodrio', 'Normal', '470'], ['Seel', 'Water', '325'], ['Dewgong', 'Water', '475'],
-                ['Grimer', 'Poison', '325'], ['Muk', 'Poison', '500'], ['Shellder', 'Water', '305'],
-                ['Cloyster', 'Water', '525'], ['Gastly', 'Ghost', '310'], ['Haunter', 'Ghost', '405'],
-                ['Gengar', 'Ghost', '500'], ['Onix', 'Rock', '385'], ['Drowzee', 'Psychic', '328'],
-                ['Hypno', 'Psychic', '483'], ['Krabby', 'Water', '325'], ['Kingler', 'Water', '475'],
-                ['Voltorb', 'Electric', '330'], ['Electrode', 'Electric', '490'], ['Exeggcute', 'Grass', '325'],
-                ['Exeggutor', 'Grass', '530'], ['Cubone', 'Ground', '320'], ['Marowak', 'Ground', '425'],
-                ['Hitmonlee', 'Fighting', '455'], ['Hitmonchan', 'Fighting', '455'], ['Lickitung', 'Normal', '385'],
-                ['Koffing', 'Poison', '340'], ['Weezing', 'Poison', '490'], ['Rhyhorn', 'Ground', '345'],
-                ['Rhydon', 'Ground', '485'], ['Chansey', 'Normal', '450'], ['Tangela', 'Grass', '435'],
-                ['Kangaskhan', 'Normal', '490'], ['Horsea', 'Water', '295'], ['Seadra', 'Water', '440'],
-                ['Goldeen', 'Water', '320'], ['Seaking', 'Water', '450'], ['Staryu', 'Water', '340'],
-                ['Starmie', 'Water', '520'], ['Scyther', 'Bug', '500'], ['Jynx', 'Ice', '455'],
-                ['Electabuzz', 'Electric', '490'], ['Magmar', 'Fire', '495'], ['Pinsir', 'Bug', '500'],
-                ['Tauros', 'Normal', '490'], ['Magikarp', 'Water', '200'], ['Gyarados', 'Water', '540'],
-                ['Lapras', 'Water', '535'], ['Ditto', 'Normal', '288'], ['Eevee', 'Normal', '325'],
-                ['Vaporeon', 'Water', '525'], ['Jolteon', 'Electric', '525'], ['Flareon', 'Fire', '525'],
-                ['Porygon', 'Normal', '395'], ['Omanyte', 'Rock', '355'], ['Omastar', 'Rock', '495'],
-                ['Kabuto', 'Rock', '355'], ['Kabutops', 'Rock', '495'], ['Aerodactyl', 'Rock', '515'],
-                ['Snorlax', 'Normal', '540'], ['Articuno', 'Ice', '580'], ['Zapdos', 'Electric', '580'],
-                ['Moltres', 'Fire', '580'], ['Dratini', 'Dragon', '300'], ['Dragonair', 'Dragon', '420'],
-                ['Dragonite', 'Dragon', '600'], ['Mewtwo', 'Psychic', '680'], ['Mew', 'Psychic', '600']]
+pokemon_info = []
 
 frame_styles = {"relief": "groove",
-                "bd": 3, "bg": "#BEB2A7",
+                "bd": 3,
                 "fg": "#073bb3", "font": ("Arial", 9, "bold")}
 
 
@@ -102,14 +81,14 @@ class LoginPage(tk.Tk):
         label_title = tk.Label(frame_login, title_styles, text="Login Page")
         label_title.grid(row=0, column=0, columnspan=1)
 
-        label_user = tk.Label(frame_login, text_styles, text="Username:")
-        label_user.grid(row=1, column=0)
+        label_email = tk.Label(frame_login, text_styles, text="Email:")
+        label_email.grid(row=1, column=0)
 
         label_pw = tk.Label(frame_login, text_styles, text="Password:")
         label_pw.grid(row=2, column=0)
 
-        entry_user = ttk.Entry(frame_login, width=45, cursor="xterm")
-        entry_user.grid(row=1, column=1)
+        entry_email = ttk.Entry(frame_login, width=45, cursor="xterm")
+        entry_email.grid(row=1, column=1)
 
         entry_pw = ttk.Entry(frame_login, width=45, cursor="xterm", show="*")
         entry_pw.grid(row=2, column=1)
@@ -124,23 +103,31 @@ class LoginPage(tk.Tk):
             SignupPage()
 
         def getLogin():
-            username = entry_user.get()
+            email = entry_email.get()
+            global emailGlobal  # this is used to set the email variable to the email entered in the login page
+            emailGlobal = email
             password = entry_pw.get()
 
-            if validate(username, password):
-                tk.messagebox.showinfo("Login Successful", "Welcome {}".format(username))
+            if validate(email, password):
+                tk.messagebox.showinfo("Login Successful", "Welcome {}".format(email))
                 root.deiconify()
                 top.destroy()
             else:
                 tk.messagebox.showerror("Information", "The Username or Password you have entered are incorrect ")
 
-        def validate(username, password):
-            user = cursor.execute("SELECT * FROM user WHERE username = '%s' AND password = '%s'" % (username, password))
-
-            if user:
-                return True
-            else:
+        def validate(email, password):
+            # check if username and password are in the database
+            cursor.execute("SELECT * FROM user WHERE email = %s", (email,))
+            user = cursor.fetchone()
+            if user is None:
                 return False
+            else:
+                if check_password(user[2], password):
+                    # signFileSHA256()
+                    # verifySignSHA256()
+                    return True
+                else:
+                    return False
 
 
 class SignupPage(tk.Tk):
@@ -163,50 +150,225 @@ class SignupPage(tk.Tk):
                        "background": "#3F6BAA",
                        "foreground": "#E1FFFF"}
 
-        label_user = tk.Label(main_frame, text_styles, text="New Username:")
-        label_user.grid(row=1, column=0)
+        label_email = tk.Label(main_frame, text_styles, text="New Email:")
+        label_email.grid(row=1, column=0)
 
         label_pw = tk.Label(main_frame, text_styles, text="New Password:")
         label_pw.grid(row=2, column=0)
 
-        entry_user = ttk.Entry(main_frame, width=20, cursor="xterm")
-        entry_user.grid(row=1, column=1)
+        label_name = tk.Label(main_frame, text_styles, text="Name:")
+        label_name.grid(row=3, column=0)
+
+        # date of birth
+        label_dob = tk.Label(main_frame, text_styles, text="Date of Birth:")
+        label_dob.grid(row=4, column=0)
+
+        # phone
+        label_phone = tk.Label(main_frame, text_styles, text="Phone:")
+        label_phone.grid(row=5, column=0)
+
+        # address
+        label_address = tk.Label(main_frame, text_styles, text="Address:")
+        label_address.grid(row=6, column=0)
+
+        entry_email = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_email.grid(row=1, column=1)
 
         entry_pw = ttk.Entry(main_frame, width=20, cursor="xterm", show="*")
         entry_pw.grid(row=2, column=1)
 
-        button = ttk.Button(main_frame, text="Create Account", command=lambda: signup())
-        button.grid(row=4, column=1)
+        entry_name = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_name.grid(row=3, column=1)
+
+        entry_dob = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_dob.grid(row=4, column=1)
+
+        entry_phone = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_phone.grid(row=5, column=1)
+
+        entry_address = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_address.grid(row=6, column=1)
+
+        button = ttk.Button(main_frame, text="Register", command=lambda: signup())
+        button.grid(row=7, column=1)
 
         def signup():
             # Creates a text file with the Username and password
-            user = entry_user.get()
+            email = entry_email.get()
             pw = entry_pw.get()
-            validation = validate_user(user)
+            name = entry_name.get()
+            dob = entry_dob.get()
+            phone = entry_phone.get()
+            address = entry_address.get()
+            validation = validate_user(email)
             if not validation:
                 tk.messagebox.showerror("Information", "That Username already exists")
             else:
-                if len(pw) > 3:
-                    credentials = open("credentials.txt", "a")
-                    credentials.write(f"Username,{user},Password,{pw},\n")
-                    credentials.close()
-                    tk.messagebox.showinfo("Information", "Your account details have been stored.")
-                    SignupPage.destroy(self)
+                password = hash_password(pw)
+                # log password console
 
-                else:
-                    tk.messagebox.showerror("Information", "Your password needs to be longer than 3 values.")
+                credentials = open("credentials.txt", "a")
+                credentials.write(f"Email,{email},Password,{pw},\n")
+                keypublic, keyprivate = generate_keypair()
+                credentials.write(f"Keypublic,{keypublic},keyprivate,{keyprivate},\n")
+                credentials.close()
+                credentials = open("credentials.txt", "a")
+                keyprivate, vector = EncryptAES(keyprivate, password)
+                credentials.close()
+                sql = "INSERT INTO user (email, password, name, dob, phone, address, key_public, key_private, vector_iv) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                val = (email, password, name, dob, phone, address, keypublic, keyprivate, vector)
+                cursor.execute(sql, val)
+                db.commit()
+                tk.messagebox.showinfo("Registration Successful", "Welcome {}".format(email))
+                global emailGlobal
+                emailGlobal = email
+                root.deiconify()
+                top.destroy()
 
-        def validate_user(username):
-            # Checks the text file for a username/password combination.
-            try:
-                with open("credentials.txt", "r") as credentials:
-                    for line in credentials:
-                        line = line.split(",")
-                        if line[1] == username:
-                            return False
+        def validate_user(email):
+            # check if the username is already in the database
+            user = cursor.execute("SELECT * FROM user WHERE email = '%s'" % email)
+
+            if user:
+                return False
+            else:
                 return True
-            except FileNotFoundError:
-                return True
+
+        def generate_keypair():
+            key = rsa.generate_private_key(
+                backend=crypto_default_backend(),
+                public_exponent=65537,
+                key_size=2048
+            )
+            private_key = key.private_bytes(
+                crypto_serialization.Encoding.PEM,
+                crypto_serialization.PrivateFormat.TraditionalOpenSSL,
+                crypto_serialization.NoEncryption()
+            )
+            public_key = key.public_key().public_bytes(
+                crypto_serialization.Encoding.OpenSSH,
+                crypto_serialization.PublicFormat.OpenSSH
+            ).decode('utf-8')
+            return (public_key, private_key)
+
+        def EncryptAES(key, password):
+            secret_key = password[0:16].encode('utf-8')
+            cipher = AES.new(secret_key, AES.MODE_CBC)
+            data_encrypt = cipher.encrypt(pad(key, AES.block_size))
+            iv = b64encode(cipher.iv).decode('utf-8')
+            data_encrypt = key.decode('utf-8')
+            return data_encrypt, iv
+
+        def DecryptAES(data_encrypt, password, iv):
+            secret_key = password[0:16].encode('utf-8')
+            cipher = AES.new(secret_key, AES.MODE_CBC, iv)
+            data = unpad(cipher.decrypt(data_encrypt), AES.block_size)
+            return data
+            return data_encrypt, iv
+
+
+class UpdatePageRegular(tk.Tk):
+
+    def __init__(self, *args, **kwargs):
+        tk.Tk.__init__(self, *args, **kwargs)
+        main_frame = tk.Frame(self, bg="#3F6BAA")
+        # pack_propagate prevents the window resizing to match the widgets
+        main_frame.pack_propagate(0)
+        main_frame.pack(fill="both", expand="true")
+
+        self.geometry("250x150")
+        self.resizable(0, 0)
+
+        self.title("Update information")
+
+        text_styles = {"font": ("Verdana", 10),
+                       "background": "#3F6BAA",
+                       "foreground": "#E1FFFF"}
+        label_name = tk.Label(main_frame, text_styles, text="Name:")
+        label_name.grid(row=3, column=0)
+
+        # date of birth
+        label_dob = tk.Label(main_frame, text_styles, text="Date of Birth:")
+        label_dob.grid(row=4, column=0)
+
+        # phone
+        label_phone = tk.Label(main_frame, text_styles, text="Phone:")
+        label_phone.grid(row=5, column=0)
+
+        # address
+        label_address = tk.Label(main_frame, text_styles, text="Address:")
+        label_address.grid(row=6, column=0)
+
+        cursor.execute("SELECT * FROM user WHERE email = '%s'" % emailGlobal)
+        user = cursor.fetchone()
+        # set default values for the fields
+        entry_name = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_name.insert(0, user[3])
+        entry_name.grid(row=3, column=1)
+
+        entry_dob = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_dob.insert(0, user[6])
+        entry_dob.grid(row=4, column=1)
+
+        entry_phone = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_phone.insert(0, user[5])
+        entry_phone.grid(row=5, column=1)
+
+        entry_address = ttk.Entry(main_frame, width=20, cursor="xterm")
+        entry_address.insert(0, user[4])
+        entry_address.grid(row=6, column=1)
+
+        button = ttk.Button(main_frame, text="Update regular", command=lambda: update())
+        button.grid(row=7, column=1)
+
+        def update():
+            # Creates a text file with the Username and password
+            name = entry_name.get()
+            dob = entry_dob.get()
+            phone = entry_phone.get()
+            address = entry_address.get()
+            # log password console
+            sql = "UPDATE user SET name = %s, dob = %s, phone = %s, address = %s WHERE email = %s"
+            val = (name, dob, phone, address, emailGlobal)
+            cursor.execute(sql, val)
+            db.commit()
+            tk.messagebox.showinfo("Update Successfully", "You updated your information {}".format(emailGlobal))
+            root.deiconify()
+
+
+class UpdatePagePassword(tk.Tk):
+
+    def __init__(self, *args, **kwargs):
+        tk.Tk.__init__(self, *args, **kwargs)
+
+        main_frame = tk.Frame(self, bg="#3F6BAA")
+        # pack_propagate prevents the window resizing to match the widgets
+        main_frame.pack_propagate(0)
+        main_frame.pack(fill="both", expand="true")
+
+        self.geometry("250x150")
+        self.resizable(0, 0)
+
+        self.title("Update information")
+
+        text_styles = {"font": ("Verdana", 10),
+                       "background": "#3F6BAA",
+                       "foreground": "#E1FFFF"}
+
+        label_pw = tk.Label(main_frame, text_styles, text="New Password:")
+        label_pw.grid(row=2, column=0)
+
+        entry_pw = ttk.Entry(main_frame, width=20, cursor="xterm", show="*")
+        entry_pw.grid(row=2, column=1)
+
+        button = ttk.Button(main_frame, text="Update password", command=lambda: update())
+        button.grid(row=7, column=1)
+
+        def update():  # @TODO update the password
+            password = entry_pw.get()
+            # Trường hợp đổi passphase cần đảm bảo cặp khoá Kprivate, Kpublic không bị thay đổi. Tức
+            # là khoá Kprivate được mã hoá ở bước 2.2 với passphase cũ, cần được mã hoá lại với
+            # passphase mới
 
 
 class MenuBar(tk.Menu):
@@ -235,8 +397,25 @@ class MenuBar(tk.Menu):
         menu_positions.add_command(label="Page Four", command=lambda: parent.show_frame(PageFour))
 
         menu_help = tk.Menu(self, tearoff=0)
-        self.add_cascade(label="Menu6", menu=menu_help)
-        menu_help.add_command(label="Open New Window", command=lambda: parent.OpenNewWindow())
+        self.add_cascade(label="Update information", menu=menu_help)
+        menu_help.add_command(label="Change information regular", command=lambda: parent.ChangeInformationRegular())
+        menu_help.add_command(label="Change information password", command=lambda: parent.ChangeInformationPassword())
+
+
+def hash_password(text):
+    """
+        Basic hashing function for a text using random unique salt.
+    """
+    salt = uuid.uuid4().hex
+    return hashlib.sha256(salt.encode() + text.encode()).hexdigest() + ':' + salt
+
+
+def check_password(hashedText, providedText):
+    """
+        Check for the text in the hashed text
+    """
+    _hashedText, salt = hashedText.split(':')
+    return _hashedText == hashlib.sha256(salt.encode() + providedText.encode()).hexdigest()
 
 
 class MyApp(tk.Tk):
@@ -264,8 +443,11 @@ class MyApp(tk.Tk):
         frame = self.frames[name]
         frame.tkraise()
 
-    def OpenNewWindow(self):
-        OpenNewWindow()
+    def ChangeInformationRegular(self):
+        UpdatePageRegular()
+
+    def ChangeInformationPassword(self):
+        UpdatePagePassword()
 
     def Quit_application(self):
         self.destroy()
@@ -282,7 +464,37 @@ class GUI(tk.Frame):
 
 
 class Some_Widgets(GUI):  # inherits from the GUI class
+
     def __init__(self, parent, controller):
+        def Encryptfile():
+            key_session = get_random_bytes(16)
+            cipher = AES.new(key_session, AES.MODE_CBC)
+            messagebox.showinfo("", "select one or more files to encrypt")
+            filepath = filedialog.askopenfilenames()
+            for x in filepath:
+                with open(x, "rb") as file:
+                    original = file.read()
+                    data_encrypt = cipher.encrypt(pad(original, AES.block_size))
+                    iv = b64encode(cipher.iv)
+                with open(x, "wb") as encrypted_file:
+                    encrypted_file.write(data_encrypt)
+                    # encrypted_file.write(b"\n")
+                    # encrypted_file.write(key_session)
+            if not filepath:
+                messagebox.showerror("Error", "no file was selected, try again")
+            else:
+                messagebox.showinfo("", "files encrypted successfully!")
+            return key_session, iv
+
+        def Decryptfile(key_session, iv):
+            messagebox.showinfo("", "select one or more files to decrypt")
+            filepath = filedialog.askopenfilenames()
+            cipher = AES.new(key_session, AES.MODE_CBC, iv)
+            for x in filepath:
+                with open(x, "rb") as file:
+                    original = file.read()
+                    data_decrypt = unpad(cipher.decrypt(original), AES.block_size)
+
         GUI.__init__(self, parent)
 
         frame1 = tk.LabelFrame(self, frame_styles, text="This is a LabelFrame containing a Treeview")
@@ -291,7 +503,7 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         frame2 = tk.LabelFrame(self, frame_styles, text="Some widgets")
         frame2.place(rely=0.05, relx=0.45, height=500, width=500)
 
-        button1 = tk.Button(frame2, text="tk button", command=lambda: Refresh_data())
+        button1 = tk.Button(frame2, text="upload file", command=lambda: Encryptfile())
         button1.pack()
         button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
         button2.pack()
@@ -309,8 +521,8 @@ class Some_Widgets(GUI):  # inherits from the GUI class
         Cbutton3.pack()
 
         Lbox1 = tk.Listbox(frame2, selectmode="multiple")
-        Lbox1.insert(1, "This is a tk ListBox")
-        Lbox1.insert(2, "Github")
+        Lbox1.insert(1, "file1")
+        Lbox1.insert(2, "file2")
         Lbox1.insert(3, "Python")
         Lbox1.insert(3, "StackOverflow")
         Lbox1.pack(side="left")
@@ -386,6 +598,11 @@ class PageTwo(GUI):
 
         label1 = tk.Label(self.main_frame, font=("Verdana", 20), text="Page Two")
         label1.pack(side="top")
+
+    def open_file():
+        file_path = askopenfile(mode='r', filetypes=[('Files to encrypt', '*doc')])
+        if file_path is not None:
+            pass
 
 
 class OpenNewWindow(tk.Tk):
