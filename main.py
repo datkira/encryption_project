@@ -1,4 +1,3 @@
-import hashlib
 import base64
 import hashlib
 import os
@@ -9,7 +8,6 @@ from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
 from tkinter.filedialog import askopenfile
-
 import pymysql
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
@@ -495,6 +493,70 @@ class Some_Widgets(GUI):  # inherits from the GUI class
                     original = file.read()
                     data_decrypt = unpad(cipher.decrypt(original), AES.block_size)
 
+        def SignFile():
+            messagebox.showinfo("", "select one or more files to sign")
+            filepath = filedialog.askopenfilenames()
+            for x in filepath:
+                cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
+                user = cursor.fetchone()
+                print(user[10])
+                private_key = serialization.load_pem_private_key(
+                    user[10].encode('ascii'),
+                    password=None,
+                    backend=default_backend(),
+                )
+
+                # Create new sign file and write the data to it
+                with open(x, "rb") as fileOrigin:
+                    payload = fileOrigin.read()
+                    print(payload)
+
+                # Sign the payload file.
+                signature = base64.b64encode(
+                    private_key.sign(
+                        payload,
+                        padding.PSS(
+                            mgf=padding.MGF1(hashes.SHA256()),
+                            salt_length=padding.PSS.MAX_LENGTH,
+                        ),
+                        hashes.SHA256(),
+                    )
+                )
+
+                with open(x + ".sign", 'wb') as sign_file:
+                    sign_file.write(signature)
+            if not filepath:
+                messagebox.showerror("Error", "no file was selected, try again")
+            else:
+                messagebox.showinfo("", "files sign successfully!")
+            return True
+
+        def VerifySignSHA256():
+            messagebox.showinfo("", "select one or more files to sign")
+            filepath = filedialog.askopenfilenames()
+            # Load the public key.
+            cursor.execute("SELECT * FROM user WHERE email = %s", (emailGlobal,))
+            user = cursor.fetchone()
+            print('filepath: ', filepath)
+            for x in filepath:
+                public_key = load_pem_public_key(user[9].encode('ascii'), default_backend())
+                # Load the payload contents and the signature.
+                with open(x, 'rb') as f:
+                    payload_contents = f.read()
+                with open('signature.sig', 'rb') as f:
+                    signature = base64.b64decode(f.read())
+
+                    # Perform the verification.
+                    public_key.verify(
+                        signature,
+                        payload_contents,
+                        padding.PSS(
+                            mgf=padding.MGF1(hashes.SHA256()),
+                            salt_length=padding.PSS.MAX_LENGTH,
+                        ),
+                        hashes.SHA256(),
+                    )
+
         GUI.__init__(self, parent)
 
         frame1 = tk.LabelFrame(self, frame_styles, text="This is a LabelFrame containing a Treeview")
@@ -505,8 +567,10 @@ class Some_Widgets(GUI):  # inherits from the GUI class
 
         button1 = tk.Button(frame2, text="upload file", command=lambda: Encryptfile())
         button1.pack()
-        button2 = ttk.Button(frame2, text="ttk button", command=lambda: Refresh_data())
+        button2 = ttk.Button(frame2, text="upload file to sign", command=lambda: SignFile())
         button2.pack()
+        button3 = ttk.Button(frame2, text="upload file to verify", command=lambda: VerifySignSHA256())
+        button3.pack()
 
         Var1 = tk.IntVar()
         Var2 = tk.IntVar()
