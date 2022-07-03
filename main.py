@@ -14,6 +14,8 @@ from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 import json
 from tkinter import filedialog
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
 
 
 
@@ -337,12 +339,27 @@ class Some_Widgets(GUI):  # inherits from the GUI class
                 with open(x, "rb") as file:
                      original = file.read()
                      data_encrypt = cipher.encrypt(pad(original,AES.block_size))
+                     iv = b64encode(cipher.iv)
                 with open(x, "wb") as encrypted_file:
                      encrypted_file.write(data_encrypt)
+                     #encrypted_file.write(b"\n")
+                     #encrypted_file.write(key_session)
             if not filepath:
                messagebox.showerror("Error", "no file was selected, try again")
             else:
                messagebox.showinfo( "", "files encrypted successfully!")
+            return key_session,iv
+        def Decryptfile(key_session,iv):
+            messagebox.showinfo( "", "select one or more files to decrypt")
+            filepath = filedialog.askopenfilenames()
+            cipher = AES.new(key_session, AES.MODE_CBC, iv)
+            for x in filepath:
+                with open(x, "rb") as file:
+                     original = file.read()
+                     data_decrypt = unpad(cipher.decrypt(original),AES.block_size)
+                     
+
+        
         GUI.__init__(self, parent)
 
         frame1 = tk.LabelFrame(self, frame_styles, text="This is a LabelFrame containing a Treeview")
@@ -486,4 +503,3 @@ root.title("Tkinter App Template")
 root.mainloop()
 # disconnect from server
 db.close()
-
